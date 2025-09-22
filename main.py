@@ -57,7 +57,7 @@ def main():
 
         logger.info("Starting message sending session...")
         messager = ChessMessager()
-        messager.send_messages(limit=1)
+        messager.send_messages(limit=2)
 
         logger.info("Main execution completed successfully.")
 
