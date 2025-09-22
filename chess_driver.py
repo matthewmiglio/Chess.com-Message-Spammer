@@ -27,6 +27,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 
 from creds import ChessCreds
+from logger import get_logger
 
 CHESS_LOGIN_PAGE_URL='https://www.chess.com/login_and_go'
 chess_creds_manager = ChessCreds()
@@ -83,6 +84,7 @@ class ChessDriver:
         self.service = None
         self._tmp_user_data_dir = tempfile.mkdtemp(prefix="selenium_chrome_profile_")
         atexit.register(self._cleanup)
+        self.logger = get_logger()
 
         chrome_options = Options()
         # Quiet flags
@@ -121,12 +123,15 @@ class ChessDriver:
         )
 
         try:
+            self.logger.log_browser_operation("Initializing Chrome browser")
             with contextlib.redirect_stderr(open(os.devnull, "w")):
                 self.driver = webdriver.Chrome(service=self.service, options=chrome_options)
                 # Track the Chrome process ID for targeted cleanup
                 self.chrome_process_id = self.driver.service.process.pid if self.driver.service.process else None
+            self.logger.log_browser_operation(f"Chrome browser initialized (PID: {self.chrome_process_id})")
         except SessionNotCreatedException:
             # retry once with a fresh dir/port
+            self.logger.log_browser_operation("Retrying Chrome initialization with fresh configuration")
             self._cleanup()
             self._tmp_user_data_dir = tempfile.mkdtemp(prefix="selenium_chrome_profile_retry_")
             chrome_options.arguments = [a for a in chrome_options.arguments if not a.startswith("--user-data-dir=")]
@@ -137,6 +142,7 @@ class ChessDriver:
                 self.driver = webdriver.Chrome(service=self.service, options=chrome_options)
                 # Track the Chrome process ID for targeted cleanup
                 self.chrome_process_id = self.driver.service.process.pid if self.driver.service.process else None
+            self.logger.log_browser_operation(f"Chrome browser retry successful (PID: {self.chrome_process_id})")
 
         self.driver.set_page_load_timeout(page_load_timeout)
         self.driver.implicitly_wait(implicit_wait)
@@ -300,6 +306,7 @@ class ChessDriver:
     
     def scrape_games(self, username: str) -> List[Game]:
         url = f"https://www.chess.com/member/{username}/games"
+        self.logger.log_browser_operation(f"Navigating to {url}")
         self.driver.get(url)
 
         wait = WebDriverWait(self.driver, 30)
@@ -308,7 +315,7 @@ class ChessDriver:
                 EC.presence_of_element_located((By.CLASS_NAME, "archived-games-table"))
             )
         except TimeoutException:
-            print(f"Timeout waiting for games table for user {username}")
+            self.logger.error(f"Timeout waiting for games table for user {username}")
             return []
 
         # Wait a bit more for dynamic content to load
@@ -322,34 +329,64 @@ class ChessDriver:
             # Limit to first 20 games to avoid timeouts on large tables
             if len(game_rows) > 20:
                 print(f"Limiting to first 20 games (found {len(game_rows)} total)")
+                self.logger.log_scraping_limited(len(game_rows), 20)
                 game_rows = game_rows[:20]
 
         except Exception as e:
-            print(f"Error finding game rows for {username}: {e}")
+            self.logger.error(f"Error finding game rows for {username}: {e}")
             return []
 
-        for row in game_rows:
+        for i, row in enumerate(game_rows, 1):
             try:
+                start_time = time.time()
+                print(f"\rProcessing game {i}/{len(game_rows)} for {username}...", end="", flush=True)
+
                 # Extract game type and time control
-                game_type_elem = row.find_element(By.CSS_SELECTOR, ".archived-games-time-control")
-                time_control = game_type_elem.text.strip()
+                print(f"\rProcessing game {i}/{len(game_rows)} - extracting time control...", end="", flush=True)
+                try:
+                    game_type_elem = WebDriverWait(self.driver, 2).until(
+                        lambda d: row.find_element(By.CSS_SELECTOR, ".archived-games-time-control")
+                    )
+                    time_control = game_type_elem.text.strip()
+                except (TimeoutException, NoSuchElementException):
+                    print(f"\rGame {i}/{len(game_rows)} - TIMEOUT: time control, using 'Unknown'", end="", flush=True)
+                    self.logger.log_game_timeout(i, len(game_rows), "time control", "Unknown")
+                    time_control = "Unknown"
 
                 # Determine game type from SVG data-glyph attribute
-                game_type_svg = row.find_element(By.CSS_SELECTOR, "[data-glyph*='game-time']")
-                glyph = game_type_svg.get_attribute("data-glyph")
-                if glyph and "blitz" in glyph:
-                    game_type = "Blitz"
-                elif glyph and "rapid" in glyph:
-                    game_type = "Rapid"
-                elif glyph and "bullet" in glyph:
-                    game_type = "Bullet"
-                elif glyph and "daily" in glyph:
-                    game_type = "Daily"
-                else:
+                print(f"\rProcessing game {i}/{len(game_rows)} - extracting game type...", end="", flush=True)
+                try:
+                    game_type_svg = WebDriverWait(self.driver, 2).until(
+                        lambda d: row.find_element(By.CSS_SELECTOR, "[data-glyph*='game-time']")
+                    )
+                    glyph = game_type_svg.get_attribute("data-glyph")
+                    if glyph and "blitz" in glyph:
+                        game_type = "Blitz"
+                    elif glyph and "rapid" in glyph:
+                        game_type = "Rapid"
+                    elif glyph and "bullet" in glyph:
+                        game_type = "Bullet"
+                    elif glyph and "daily" in glyph:
+                        game_type = "Daily"
+                    else:
+                        game_type = "Unknown"
+                except (TimeoutException, NoSuchElementException):
+                    print(f"\rGame {i}/{len(game_rows)} - TIMEOUT: game type, using 'Unknown'", end="", flush=True)
+                    self.logger.log_game_timeout(i, len(game_rows), "game type", "Unknown")
                     game_type = "Unknown"
 
                 # Extract player information
-                user_tags = row.find_elements(By.CSS_SELECTOR, ".archived-games-user-tagline")
+                print(f"\rProcessing game {i}/{len(game_rows)} - extracting players...", end="", flush=True)
+                try:
+                    user_tags = WebDriverWait(self.driver, 2).until(
+                        lambda d: row.find_elements(By.CSS_SELECTOR, ".archived-games-user-tagline")
+                    )
+                except (TimeoutException, NoSuchElementException):
+                    elapsed = time.time() - start_time
+                    print(f"\rGame {i}/{len(game_rows)} - SKIP: failed to get players ({elapsed:.2f}s)")
+                    self.logger.log_game_skip(i, len(game_rows), "failed to get players", elapsed)
+                    continue
+
                 white_player = "Unknown"
                 white_rating = "0"
                 black_player = "Unknown"
@@ -357,11 +394,17 @@ class ChessDriver:
 
                 if len(user_tags) >= 2:
                     # White player (first tagline)
+                    print(f"\rProcessing game {i}/{len(game_rows)} - extracting white player...", end="", flush=True)
                     try:
-                        white_username_elem = user_tags[0].find_element(By.CSS_SELECTOR, ".cc-user-username-component")
+                        white_username_elem = WebDriverWait(self.driver, 2).until(
+                            lambda d: user_tags[0].find_element(By.CSS_SELECTOR, ".cc-user-username-component")
+                        )
                         white_player = white_username_elem.text.strip() if white_username_elem else "Unknown"
-                    except NoSuchElementException:
-                        white_player = "Unknown"
+                    except (TimeoutException, NoSuchElementException):
+                        elapsed = time.time() - start_time
+                        print(f"\rGame {i}/{len(game_rows)} - SKIP: failed to get white player ({elapsed:.2f}s)")
+                        self.logger.log_game_skip(i, len(game_rows), "failed to get white player", elapsed)
+                        continue
 
                     try:
                         white_rating_elem = user_tags[0].find_element(By.CSS_SELECTOR, ".cc-user-rating-default")
@@ -370,22 +413,37 @@ class ChessDriver:
                         white_rating = "0"
 
                     # Black player (second tagline)
+                    print(f"\rProcessing game {i}/{len(game_rows)} - extracting black player...", end="", flush=True)
                     try:
-                        black_username_elem = user_tags[1].find_element(By.CSS_SELECTOR, ".cc-user-username-component")
+                        black_username_elem = WebDriverWait(self.driver, 2).until(
+                            lambda d: user_tags[1].find_element(By.CSS_SELECTOR, ".cc-user-username-component")
+                        )
                         black_player = black_username_elem.text.strip() if black_username_elem else "Unknown"
-                    except NoSuchElementException:
-                        black_player = "Unknown"
+                    except (TimeoutException, NoSuchElementException):
+                        elapsed = time.time() - start_time
+                        print(f"\rGame {i}/{len(game_rows)} - SKIP: failed to get black player ({elapsed:.2f}s)")
+                        self.logger.log_game_skip(i, len(game_rows), "failed to get black player", elapsed)
+                        continue
 
                     try:
                         black_rating_elem = user_tags[1].find_element(By.CSS_SELECTOR, ".cc-user-rating-default")
                         black_rating = black_rating_elem.text.strip().replace("(", "").replace(")", "") if black_rating_elem else "0"
                     except NoSuchElementException:
                         black_rating = "0"
+                else:
+                    # Skip if we don't have at least 2 user tags
+                    elapsed = time.time() - start_time
+                    print(f"\rGame {i}/{len(game_rows)} - SKIP: insufficient player data ({elapsed:.2f}s)")
+                    self.logger.log_game_skip(i, len(game_rows), "insufficient player data", elapsed)
+                    continue
 
                 # Extract result
+                print(f"\rProcessing game {i}/{len(game_rows)} - extracting result...", end="", flush=True)
                 result = "Unknown"
                 try:
-                    result_elem = row.find_element(By.CSS_SELECTOR, ".archived-games-result span")
+                    result_elem = WebDriverWait(self.driver, 2).until(
+                        lambda d: row.find_element(By.CSS_SELECTOR, ".archived-games-result span")
+                    )
                     if result_elem:
                         result_glyph = result_elem.get_attribute("data-glyph")
                         if result_glyph and "plus" in result_glyph:
@@ -394,30 +452,48 @@ class ChessDriver:
                             result = "Loss"
                         elif result_glyph and "equal" in result_glyph:
                             result = "Draw"
-                except NoSuchElementException:
+                except (TimeoutException, NoSuchElementException):
+                    print(f"\rGame {i}/{len(game_rows)} - TIMEOUT: result, using 'Unknown'", end="", flush=True)
+                    self.logger.log_game_timeout(i, len(game_rows), "result", "Unknown")
                     result = "Unknown"
 
                 # Extract moves count
+                print(f"\rProcessing game {i}/{len(game_rows)} - extracting moves...", end="", flush=True)
                 try:
-                    moves_elem = row.find_element(By.CSS_SELECTOR, "td:nth-child(6) span")
+                    moves_elem = WebDriverWait(self.driver, 2).until(
+                        lambda d: row.find_element(By.CSS_SELECTOR, "td:nth-child(6) span")
+                    )
                     moves = moves_elem.text.strip() if moves_elem else "0"
-                except NoSuchElementException:
+                except (TimeoutException, NoSuchElementException):
+                    print(f"\rGame {i}/{len(game_rows)} - TIMEOUT: moves, using '0'", end="", flush=True)
+                    self.logger.log_game_timeout(i, len(game_rows), "moves", "0")
                     moves = "0"
 
                 # Extract date
+                print(f"\rProcessing game {i}/{len(game_rows)} - extracting date...", end="", flush=True)
                 try:
-                    date_elem = row.find_element(By.CSS_SELECTOR, "td:nth-child(7) span")
+                    date_elem = WebDriverWait(self.driver, 2).until(
+                        lambda d: row.find_element(By.CSS_SELECTOR, "td:nth-child(7) span")
+                    )
                     date = date_elem.text.strip() if date_elem else "Unknown"
-                except NoSuchElementException:
+                except (TimeoutException, NoSuchElementException):
+                    print(f"\rGame {i}/{len(game_rows)} - TIMEOUT: date, using 'Unknown'", end="", flush=True)
+                    self.logger.log_game_timeout(i, len(game_rows), "date", "Unknown")
                     date = "Unknown"
 
                 # Extract game URL
+                print(f"\rProcessing game {i}/{len(game_rows)} - extracting URL...", end="", flush=True)
                 try:
-                    game_link = row.find_element(By.CSS_SELECTOR, ".archived-games-background-link")
+                    game_link = WebDriverWait(self.driver, 2).until(
+                        lambda d: row.find_element(By.CSS_SELECTOR, ".archived-games-background-link")
+                    )
                     game_url = game_link.get_attribute("href") if game_link else ""
-                except NoSuchElementException:
+                except (TimeoutException, NoSuchElementException):
+                    print(f"\rGame {i}/{len(game_rows)} - TIMEOUT: URL, using ''", end="", flush=True)
+                    self.logger.log_game_timeout(i, len(game_rows), "URL", "")
                     game_url = ""
 
+                print(f"\rProcessing game {i}/{len(game_rows)} - creating game object...", end="", flush=True)
                 game = Game(
                     game_type=game_type,
                     time_control=time_control,
@@ -431,15 +507,21 @@ class ChessDriver:
                     game_url=game_url
                 )
                 games.append(game)
+                elapsed = time.time() - start_time
+                print(f"\rGame {i}/{len(game_rows)} - SUCCESS: {white_player} vs {black_player} ({elapsed:.2f}s)")
+                self.logger.log_game_success(i, len(game_rows), white_player, black_player, elapsed)
 
-            except NoSuchElementException:
+            except Exception as e:
+                elapsed = time.time() - start_time
+                print(f"\rGame {i}/{len(game_rows)} - ERROR: {str(e)} ({elapsed:.2f}s)")
+                self.logger.log_game_error(i, len(game_rows), str(e), elapsed)
                 continue
 
         return games
 
     def send_message(self, recipient_username, message) -> bool:
         try:
-            print(f'Sending message to {recipient_username}: {message}')
+            self.logger.log_browser_operation(f'Navigating to compose message page for {recipient_username}')
 
             # Navigate to compose message page
             self.driver.get('https://www.chess.com/messages/compose')
@@ -463,7 +545,7 @@ class ChessDriver:
                 first_result = autocomplete_dropdown.find_element(By.CSS_SELECTOR, ".form-autocomplete-item")
                 first_result.click()
             except (TimeoutException, NoSuchElementException):
-                print(f"Warning: Could not find autocomplete for user {recipient_username}")
+                self.logger.warning(f"Could not find autocomplete for user {recipient_username}")
                 return False
 
             # Wait for the message editor iframe to load
@@ -510,11 +592,11 @@ class ChessDriver:
             )
             send_button.click()
 
-            print(f"Successfully sent message to {recipient_username}")
+            self.logger.log_browser_operation(f"Successfully sent message to {recipient_username}")
             return True
 
         except Exception as e:
-            print(f"Error sending message to {recipient_username}: {e}")
+            self.logger.error(f"Error sending message to {recipient_username}: {e}")
             # Make sure we're back in default context
             try:
                 self.driver.switch_to.default_content()

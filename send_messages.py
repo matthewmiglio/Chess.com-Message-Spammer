@@ -1,4 +1,5 @@
 from chess_driver import ChessDriver
+from logger import get_logger
 import csv
 import pandas as pd
 import random
@@ -15,6 +16,7 @@ class MessageLogger:
             "message",
             "timestamp",
         ]
+        self.logger = get_logger()
 
         # create the file if it doesn't exist
         try:
@@ -28,15 +30,13 @@ class MessageLogger:
             pass
 
     def is_new_recipient(self, recipient):
-        print(f"Checking if player: {recipient} is new")
+        self.logger.debug(f"Checking if player: {recipient} is new")
         df = pd.read_csv(self.fp)
-        print(f"message log df: {df}")
-        if recipient in df["recipient"].values:
-            print("not a new guy")
-            return False
+        self.logger.debug(f"Message log contains {len(df)} entries")
 
-        print("New guy!")
-        return True
+        is_new = recipient not in df["recipient"].values
+        self.logger.log_new_recipient_check(recipient, is_new)
+        return is_new
 
     def log_message(self, recipient, message):
         timestamp = datetime.now().isoformat()
@@ -59,6 +59,7 @@ class ChessMessager:
         self.games_file = "games.csv"
         self.message_logger = MessageLogger()
         self.logged_in = False
+        self.logger = get_logger()
 
     def get_random_target(self):
         # load that csv as a pandas df
@@ -68,11 +69,12 @@ class ChessMessager:
         while 1:
             # get a random row
             random_row = df.sample(n=1).iloc[0]
-            print("random row: ", random_row)
+            self.logger.debug(f"Random game: {random_row['white_player']} vs {random_row['black_player']}")
 
             # check if any of these guys are new recipients
             for player in [random_row["white_player"], random_row["black_player"]]:
                 if self.message_logger.is_new_recipient(player):
+                    self.logger.info(f"Selected new target: {player}")
                     return player
 
     def compile_random_ad_message(self):
@@ -146,25 +148,42 @@ class ChessMessager:
     def send_random_message(self):
         # log in if not logged in
         if not self.logged_in:
+            self.logger.info("Logging into Chess.com...")
             self.driver.login()
             self.logged_in = True
+            self.logger.info("Successfully logged in")
 
         recipient = self.get_random_target()
         message = self.compile_random_ad_message()
+
+        self.logger.log_message_attempt(recipient, message)
+
         if self.driver.send_message(recipient, message):
             self.message_logger.log_message(recipient, message)
+            self.logger.log_message_success(recipient)
             return True
-        return False
+        else:
+            self.logger.log_message_failure(recipient, "Unknown error")
+            return False
 
     def send_messages(self, limit=100):
         sends = 0
+        self.logger.info(f"Starting message sending session (limit: {limit})")
 
         while 1:
             if self.send_random_message():
                 sends += 1
-                print(f"Sent {sends} messages so far")
+                self.logger.info(f"Progress: Sent {sends}/{limit} messages")
             if sends >= limit:
+                self.logger.info(f"Completed message sending session: {sends} messages sent")
                 break
+
+        # Log final statistics
+        self.logger.log_stats(
+            messages_sent=sends,
+            target_limit=limit,
+            success_rate=f"{(sends/limit)*100:.1f}%" if limit > 0 else "N/A"
+        )
 
     def test_compile_random_ad_message(self):
         for _ in range(100):
