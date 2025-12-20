@@ -5,6 +5,7 @@ import csv
 import os
 import random
 import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 
 
 class GameSaver:
@@ -103,6 +104,8 @@ class GameSaver:
             self.logger.error(f"Error saving game to CSV: {e}")
 
     def scrape(self, scrape_limit=None):
+        USER_TIMEOUT = 120  # 2 minutes per user
+
         scrapes = 0
         try:
             while True:
@@ -111,8 +114,14 @@ class GameSaver:
                 self.logger.log_scraping_start(username)
 
                 try:
-                    # scrape games
-                    games = self.driver.scrape_games(username)
+                    # scrape games with user-level timeout
+                    with ThreadPoolExecutor(max_workers=1) as executor:
+                        future = executor.submit(self.driver.scrape_games, username)
+                        try:
+                            games = future.result(timeout=USER_TIMEOUT)
+                        except FuturesTimeoutError:
+                            self.logger.warning(f"Timeout scraping user {username} after {USER_TIMEOUT}s")
+                            games = []
                     self.logger.log_scraping_found(username, len(games))
 
                     for game in games:

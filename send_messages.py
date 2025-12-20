@@ -89,7 +89,7 @@ class ChessMessager:
             "Yo yo",
             "What's up?",
             "How's it going?",
-            "Yo 🙌",
+            "Yo",
             "Hey bro",
             "What's happening?",
             "Yo man",
