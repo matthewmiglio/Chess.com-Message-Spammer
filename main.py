@@ -51,7 +51,7 @@ def main():
         if not new_recipients_exist():
             logger.info("No new recipients found. Starting game scraping session.")
             game_scraper = GameSaver()
-            game_scraper.scrape(scrape_limit=101)
+            game_scraper.scrape(scrape_limit=99)
         else:
             logger.info("New recipients found. Proceeding to messaging.")
 
