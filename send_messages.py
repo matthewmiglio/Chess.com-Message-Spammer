@@ -93,7 +93,6 @@ class ChessMessager:
             "Hey bro",
             "What's happening?",
             "Yo man",
-            "Hey guys",
             "Sup",
             "Hey there",
             "How's everything?",
