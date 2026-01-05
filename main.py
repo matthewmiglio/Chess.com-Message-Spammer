@@ -1,5 +1,6 @@
 from send_messages import ChessMessager
 from scrape_games import GameSaver
+from creds import ChessCreds
 from logger import get_logger, log_session_end
 
 import csv
@@ -8,9 +9,10 @@ import pandas as pd
 import sys
 import traceback
 
-MESSAGES_PER_RUN = 3
+MESSAGES_PER_RUN = 3  # Messages per account per run
 
-def new_recipients_exist():
+def new_recipients_exist(required_count):
+    """Check if there are enough new recipients for the given count."""
     games_csv_path = r'games.csv'
     message_log_csv_path = r'message_log.csv'
 
@@ -26,7 +28,7 @@ def new_recipients_exist():
     if not os.path.exists(message_log_csv_path):
         games_df = pd.read_csv(games_csv_path)
         all_players = pd.concat([games_df['white_player'], games_df['black_player']]).unique()
-        return len(all_players) >= MESSAGES_PER_RUN
+        return len(all_players) >= required_count
 
     #open both files
     games_df = pd.read_csv(games_csv_path)
@@ -41,7 +43,7 @@ def new_recipients_exist():
     for player in all_players:
         if not user_in_message_log(player):
             new_recipient_count += 1
-            if new_recipient_count >= MESSAGES_PER_RUN:
+            if new_recipient_count >= required_count:
                 return True
 
     return False
@@ -50,17 +52,33 @@ def main():
     logger = get_logger()
 
     try:
+        # Load all accounts
+        creds_manager = ChessCreds()
+        accounts = creds_manager.get_all_accounts()
+        num_accounts = len(accounts)
+        total_messages_needed = num_accounts * MESSAGES_PER_RUN
+
+        logger.info(f"Loaded {num_accounts} accounts, planning to send {MESSAGES_PER_RUN} messages each ({total_messages_needed} total)")
+
         logger.info("Checking for new recipients...")
-        if not new_recipients_exist():
-            logger.info("No new recipients found. Starting game scraping session.")
+        if not new_recipients_exist(total_messages_needed):
+            logger.info("Not enough new recipients found. Starting game scraping session.")
             game_scraper = GameSaver()
             game_scraper.scrape(scrape_limit=99)
         else:
-            logger.info("New recipients found. Proceeding to messaging.")
+            logger.info("Enough new recipients found. Proceeding to messaging.")
 
         logger.info("Starting message sending session...")
-        messager = ChessMessager()
-        messager.send_messages(limit=MESSAGES_PER_RUN)
+
+        # Each account sends MESSAGES_PER_RUN messages
+        for i, account in enumerate(accounts):
+            username = account['username']
+            logger.info(f"Account {i + 1}/{num_accounts}: {username}")
+
+            messager = ChessMessager(credentials=account)
+            messager.send_messages(limit=MESSAGES_PER_RUN)
+
+            logger.info(f"Account {username} finished sending messages")
 
         logger.info("Main execution completed successfully.")
 

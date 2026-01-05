@@ -17,7 +17,7 @@ class GameSaver:
     def get_random_username(self):
         # if the CSV file doesn't exist yet, just use this username to start
         if not os.path.exists(self.fp):
-            return "bloodxoxo"
+            return "Ali-haris25"
 
         # open the games csv, find the white_player & black_player cols
         # return a random one from a random row
@@ -34,10 +34,10 @@ class GameSaver:
                         usernames.add(row["black_player"])
         except Exception as e:
             self.logger.error(f"Error reading CSV file: {e}")
-            return "bloodxoxo"
+            return "Ali-haris25"
 
         if not usernames:
-            return "bloodxoxo"
+            return "Ali-haris25"
 
         return random.choice(list(usernames))
 

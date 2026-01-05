@@ -54,8 +54,9 @@ class MessageLogger:
 
 
 class ChessMessager:
-    def __init__(self):
-        self.driver = ChessDriver()
+    def __init__(self, credentials: dict):
+        self.credentials = credentials
+        self.driver = ChessDriver(credentials=credentials)
         self.games_file = "games.csv"
         self.message_logger = MessageLogger()
         self.logged_in = False
@@ -85,8 +86,6 @@ class ChessMessager:
             "Hey dude",
             "What's good?",
             "Hey fam",
-            "Hey hey",
-            "Yo yo",
             "What's up?",
             "How's it going?",
             "Yo",
@@ -95,9 +94,12 @@ class ChessMessager:
             "Yo man",
             "Sup",
             "Hey there",
-            "How's everything?",
             "Yo dude",
-            "Heyy",
+            "Hey buddy",
+            "What's going on?",
+            "Hi there",
+            "Hey friend",
+            "Hi!",
         ]
 
         middles = [
@@ -107,20 +109,20 @@ class ChessMessager:
             "I built a site with chess puzzles and training tools",
             "I put together a chess practice site with daily puzzles",
             "I've been building a place for chess players to train",
-            "I've got a new chess practice site up and running",
             "I'm working on a chess training site",
             "I just finished a site for chess practice",
             "I've been setting up a chess training site",
             "I made a site focused on puzzles and practice",
             "I started a chess practice site",
             "I built a spot for daily puzzles and training",
-            "I've got a chess practice site running",
-            "I set up a chess training site",
+            "I created a chess training site",
             "I've been working on a site with chess drills",
             "I put together a chess practice site",
             "I built a place for chess puzzles and training",
             "I just launched a site for practice and puzzles",
             "I made a chess training site",
+            "I recently finished building a chess practice site",
+            "I made a place for chess players to practice",
         ]
 
         endings = [
@@ -130,7 +132,20 @@ class ChessMessager:
             "curious what you think",
             "let me know if it's fun",
             "hope it's useful",
-            "see what you think",
+            "check it out if you get a chance",
+            "thought you might like it",
+            "feel free to try it out",
+            "hope you find it helpful",
+            "let me know if you have any feedback",
+            "would appreciate any feedback",
+            "give it a try if you want",
+            "hope it helps with your game",
+            "thought I'd share it with you",
+            "let me know if you like it",
+            "hope you enjoy it",
+            "tell me what you think",
+            "happy to hear your thoughts",
+            "would love to know what you think",
         ]
 
         greeting = random.choice(greetings)
@@ -188,6 +203,91 @@ class ChessMessager:
         for _ in range(100):
             print(self.compile_random_ad_message())
 
+    @staticmethod
+    def print_random_messages(count=20):
+        greetings = [
+            "Hey!",
+            "Yo!",
+            "Hey man",
+            "Hey dude",
+            "What's good?",
+            "Hey fam",
+            "What's up?",
+            "How's it going?",
+            "Yo",
+            "Hey bro",
+            "What's happening?",
+            "Yo man",
+            "Sup",
+            "Hey there",
+            "Yo dude",
+            "Hey buddy",
+            "What's going on?",
+            "Hi there",
+            "Hey friend",
+            "Hi!",
+        ]
+
+        middles = [
+            "I've been working on a chess practice site",
+            "I just launched a chess training site I've been building",
+            "I've been putting together a site for chess practice",
+            "I built a site with chess puzzles and training tools",
+            "I put together a chess practice site with daily puzzles",
+            "I've been building a place for chess players to train",
+            "I'm working on a chess training site",
+            "I just finished a site for chess practice",
+            "I've been setting up a chess training site",
+            "I made a site focused on puzzles and practice",
+            "I started a chess practice site",
+            "I built a spot for daily puzzles and training",
+            "I created a chess training site",
+            "I've been working on a site with chess drills",
+            "I put together a chess practice site",
+            "I built a place for chess puzzles and training",
+            "I just launched a site for practice and puzzles",
+            "I made a chess training site",
+            "I recently finished building a chess practice site",
+            "I made a place for chess players to practice",
+        ]
+
+        endings = [
+            "hope you like it",
+            "let me know what you think",
+            "would love your thoughts",
+            "curious what you think",
+            "let me know if it's fun",
+            "hope it's useful",
+            "check it out if you get a chance",
+            "thought you might like it",
+            "feel free to try it out",
+            "hope you find it helpful",
+            "let me know if you have any feedback",
+            "would appreciate any feedback",
+            "give it a try if you want",
+            "hope it helps with your game",
+            "thought I'd share it with you",
+            "let me know if you like it",
+            "hope you enjoy it",
+            "tell me what you think",
+            "happy to hear your thoughts",
+            "would love to know what you think",
+        ]
+
+        def assemble(greeting, middle, ending):
+            needs_comma = not (greeting.endswith("!") or greeting.endswith("?"))
+            g = greeting + ("," if needs_comma else "")
+            return f"{g} {middle}: https://chesspecker.org {ending}"
+
+        print(f"=== {count} Random Messages ===\n")
+        for i in range(count):
+            g = random.choice(greetings)
+            m = random.choice(middles)
+            e = random.choice(endings)
+            msg = assemble(g, m, e)
+            print(f"[{i+1}] {msg}")
+        print()
+
 
 if __name__ == "__main__":
-    pass
+    ChessMessager.print_random_messages(20)

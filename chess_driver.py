@@ -26,15 +26,9 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 
-from creds import ChessCreds
 from logger import get_logger
 
-CHESS_LOGIN_PAGE_URL='https://www.chess.com/login_and_go'
-chess_creds_manager = ChessCreds()
-creds = chess_creds_manager.get_creds()
-USERNAME = creds['username']
-PASSWORD = creds['password']
-print(f'Retreived creds for user {USERNAME}')
+CHESS_LOGIN_PAGE_URL = 'https://www.chess.com/login_and_go'
 
 # ----------------------------
 # Global noise suppression
@@ -76,15 +70,19 @@ def _get_free_port() -> int:
 class ChessDriver:
     def __init__(
         self,
+        credentials: dict = None,
         headless: bool = False,
         page_load_timeout: int = 30,
         implicit_wait: int = 5,
     ):
+        self.credentials = credentials
         self.chrome_process_id = None
         self.service = None
         self._tmp_user_data_dir = tempfile.mkdtemp(prefix="selenium_chrome_profile_")
         atexit.register(self._cleanup)
         self.logger = get_logger()
+        if credentials:
+            print(f'Using credentials for user {credentials["username"]}')
 
         chrome_options = Options()
         # Quiet flags
@@ -275,6 +273,12 @@ class ChessDriver:
  
     # --- scraping
     def login(self):
+        if not self.credentials:
+            raise ValueError("No credentials provided for login")
+
+        username = self.credentials['username']
+        password = self.credentials['password']
+
         self.driver.get(CHESS_LOGIN_PAGE_URL)
 
         wait = WebDriverWait(self.driver, 10)
@@ -283,11 +287,11 @@ class ChessDriver:
             EC.presence_of_element_located((By.ID, "login-username"))
         )
         username_field.clear()
-        username_field.send_keys(USERNAME)
+        username_field.send_keys(username)
 
         password_field = self.driver.find_element(By.ID, "login-password")
         password_field.clear()
-        password_field.send_keys(PASSWORD)
+        password_field.send_keys(password)
 
         login_button = self.driver.find_element(By.ID, "login")
         login_button.click()
@@ -661,10 +665,14 @@ class ChessDriver:
 
 if __name__ == "__main__":
     # Test the messaging functionality
+    from creds import ChessCreds
+
     driver = None
 
     try:
-        driver = ChessDriver(headless=False)
+        creds_manager = ChessCreds()
+        creds = creds_manager.get_creds()
+        driver = ChessDriver(credentials=creds, headless=False)
 
         # Login first
         print("Logging in...")
