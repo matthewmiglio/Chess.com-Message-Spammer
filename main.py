@@ -7,9 +7,11 @@ import csv
 import os
 import pandas as pd
 import sys
+import time
 import traceback
 
 MESSAGES_PER_RUN = 3  # Messages per account per run
+SCRAPE_BACKOFF_MINUTES = [1, 3, 5]  # Backoff times between retries
 
 def new_recipients_exist(required_count):
     """Check if there are enough new recipients for the given count."""
@@ -48,6 +50,25 @@ def new_recipients_exist(required_count):
 
     return False
 
+def run_scraping_with_retry(logger, scrape_limit=99):
+    """Run scraping with retry and backoff logic."""
+    for attempt in range(len(SCRAPE_BACKOFF_MINUTES) + 1):
+        try:
+            game_scraper = GameSaver()
+            game_scraper.scrape(scrape_limit=scrape_limit)
+            return True
+        except Exception as e:
+            logger.error(f"Scraping attempt {attempt + 1} failed: {e}")
+
+            if attempt < len(SCRAPE_BACKOFF_MINUTES):
+                backoff_minutes = SCRAPE_BACKOFF_MINUTES[attempt]
+                logger.info(f"Waiting {backoff_minutes} minute(s) before retry...")
+                time.sleep(backoff_minutes * 60)
+            else:
+                logger.warning("All scraping retries exhausted, continuing without new recipients")
+                return False
+    return False
+
 def main():
     logger = get_logger()
 
@@ -63,8 +84,7 @@ def main():
         logger.info("Checking for new recipients...")
         if not new_recipients_exist(total_messages_needed):
             logger.info("Not enough new recipients found. Starting game scraping session.")
-            game_scraper = GameSaver()
-            game_scraper.scrape(scrape_limit=99)
+            run_scraping_with_retry(logger, scrape_limit=99)
         else:
             logger.info("Enough new recipients found. Proceeding to messaging.")
 

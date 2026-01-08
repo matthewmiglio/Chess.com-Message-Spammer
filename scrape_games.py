@@ -103,12 +103,19 @@ class GameSaver:
         except Exception as e:
             self.logger.error(f"Error saving game to CSV: {e}")
 
-    def scrape(self, scrape_limit=None):
+    def scrape(self, scrape_limit=None, max_duration_minutes=20):
         USER_TIMEOUT = 120  # 2 minutes per user
+        MAX_DURATION_SECONDS = max_duration_minutes * 60
 
         scrapes = 0
+        start_time = time.time()
         try:
             while True:
+                # Check if we've exceeded the maximum duration
+                elapsed = time.time() - start_time
+                if elapsed >= MAX_DURATION_SECONDS:
+                    self.logger.info(f"Reached max scraping duration of {max_duration_minutes} minutes")
+                    return
                 # pick a random target, given the already scraped games
                 username = self.get_random_username()
                 self.logger.log_scraping_start(username)
