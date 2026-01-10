@@ -349,44 +349,57 @@ class ChessDriver:
         login_button = self.driver.find_element(By.ID, "login")
         login_button.click()
 
-        # Dismiss any popup modals that appear after login (e.g., coach nudges)
-        self._dismiss_post_login_modals()
+        # Wait for login indicators, dismissing any modals that appear
+        self._wait_for_login_success(timeout=15)
 
-        # Wait for any of these logged-in indicators to appear
+    def _wait_for_login_success(self, timeout=15):
+        """
+        Poll for login success indicators while also checking for and dismissing modals.
+        Continuously checks for both until login is confirmed or timeout.
+        """
         logged_in_selectors = [
-            "div.sidebar-footer-icon[data-interaction='messages']",  # Messages icon
-            "a[href*='/stats/overview/']",                           # Stats link
-            "div.sidebar-footer-icon[data-interaction='settings']",  # Settings icon
-            "div.toolbar-user-info[data-cy='profile-section']",      # Profile section
+            "div.sidebar-footer-icon[data-interaction='messages']",
+            "a[href*='/stats/overview/']",
+            "div.sidebar-footer-icon[data-interaction='settings']",
+            "div.toolbar-user-info[data-cy='profile-section']",
         ]
-
-        wait.until(
-            EC.any_of(*[
-                EC.presence_of_element_located((By.CSS_SELECTOR, selector))
-                for selector in logged_in_selectors
-            ])
-        )
-
-    def _dismiss_post_login_modals(self):
-        """Dismiss any popup modals that appear after login (coach nudges, etc.)."""
-        time.sleep(1.5)  # Wait for modal to potentially appear
 
         modal_dismiss_selectors = [
-            "button.cc-modal-close-component",           # Modal close X button
-            "button[aria-label='Close']",                # Close button by aria-label
-            ".coach-nudges-modal-component button.cc-button-ghost",  # "No, thank you" button
+            "button.cc-modal-close-component",
+            "button[aria-label='Close']",
+            ".coach-nudges-modal-component button.cc-button-ghost",
         ]
 
-        for selector in modal_dismiss_selectors:
-            try:
-                close_btn = self.driver.find_element(By.CSS_SELECTOR, selector)
-                if close_btn.is_displayed():
-                    close_btn.click()
-                    self.logger.log_browser_operation("Dismissed post-login modal")
-                    time.sleep(0.5)  # Wait for modal to close
-                    return
-            except NoSuchElementException:
-                continue
+        start_time = time.time()
+        modal_dismissed = False
+
+        while time.time() - start_time < timeout:
+            # Check for login success indicators
+            for selector in logged_in_selectors:
+                try:
+                    element = self.driver.find_element(By.CSS_SELECTOR, selector)
+                    if element.is_displayed():
+                        return  # Login successful
+                except NoSuchElementException:
+                    pass
+
+            # Check for and dismiss modal (only if not already dismissed)
+            if not modal_dismissed:
+                for selector in modal_dismiss_selectors:
+                    try:
+                        close_btn = self.driver.find_element(By.CSS_SELECTOR, selector)
+                        if close_btn.is_displayed():
+                            close_btn.click()
+                            self.logger.log_browser_operation("Dismissed post-login modal")
+                            modal_dismissed = True
+                            time.sleep(0.3)
+                            break
+                    except NoSuchElementException:
+                        pass
+
+            time.sleep(0.2)  # Poll interval
+
+        raise TimeoutException(f"Login success not detected within {timeout} seconds")
 
     def open_messages(self):
         self.driver.get("https://www.chess.com/messages/")
