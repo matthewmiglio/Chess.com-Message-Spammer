@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(poetry remove:*)",
-      "Bash(poetry add:*)",
-      "Bash(poetry install:*)"
-    ]
-  }
-}
