@@ -62,6 +62,12 @@ class ChessMessager:
         self.logged_in = False
         self.logger = get_logger()
 
+    def close(self):
+        """Clean up the browser driver."""
+        if self.driver:
+            self.driver._cleanup()
+            self.driver = None
+
     def get_random_target(self):
         # load that csv as a pandas df
         df = pd.read_csv(self.games_file)

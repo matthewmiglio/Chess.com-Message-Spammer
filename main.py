@@ -98,7 +98,10 @@ def main():
             logger.info(f"Account {i + 1}/{num_accounts}: {username}")
 
             messager = ChessMessager(credentials=account)
-            messager.send_messages(limit=MESSAGES_PER_RUN)
+            try:
+                messager.send_messages(limit=MESSAGES_PER_RUN)
+            finally:
+                messager.close()
 
             logger.info(f"Account {username} finished sending messages")
 
