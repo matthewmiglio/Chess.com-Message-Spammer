@@ -369,14 +369,16 @@ class ChessDriver:
             "a.play-quick-links-link",
         ]
 
+        # Selectors for modal close buttons (try clicking any of these)
         modal_dismiss_selectors = [
+            "div.coach-nudges-modal-component button.cc-close-button-component",
+            "div.cc-modal-body button.cc-close-button-component",
             "button.cc-modal-close-component",
-            "button[aria-label='Close']",
-            ".coach-nudges-modal-component button.cc-button-ghost",
+            "div.coach-nudges-modal-component button.cc-button-ghost",
+            "div.cc-modal-body button.cc-button-ghost",
         ]
 
         start_time = time.time()
-        modal_dismissed = False
 
         while time.time() - start_time < timeout:
             # Check for login success indicators
@@ -388,19 +390,17 @@ class ChessDriver:
                 except NoSuchElementException:
                     pass
 
-            # Check for and dismiss modal (only if not already dismissed)
-            if not modal_dismissed:
-                for selector in modal_dismiss_selectors:
-                    try:
-                        close_btn = self.driver.find_element(By.CSS_SELECTOR, selector)
-                        if close_btn.is_displayed():
-                            close_btn.click()
-                            self.logger.log_browser_operation("Dismissed post-login modal")
-                            modal_dismissed = True
-                            time.sleep(0.3)
-                            break
-                    except NoSuchElementException:
-                        pass
+            # Always check for modals (they can appear multiple times)
+            for selector in modal_dismiss_selectors:
+                try:
+                    close_btn = self.driver.find_element(By.CSS_SELECTOR, selector)
+                    if close_btn.is_displayed():
+                        close_btn.click()
+                        self.logger.log_browser_operation(f"Dismissed modal via: {selector}")
+                        time.sleep(0.5)
+                        break
+                except NoSuchElementException:
+                    pass
 
             time.sleep(0.2)  # Poll interval
 
