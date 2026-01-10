@@ -123,6 +123,43 @@ class ChessDriver:
         self.driver.set_page_load_timeout(page_load_timeout)
         self.driver.implicitly_wait(implicit_wait)
 
+        # Spoof WebGL to hide VM fingerprint
+        self._spoof_webgl()
+
+    def _spoof_webgl(self):
+        """Inject script to spoof WebGL renderer/vendor to look like a real GPU."""
+        webgl_spoof_script = """
+        const getParameter = WebGLRenderingContext.prototype.getParameter;
+        WebGLRenderingContext.prototype.getParameter = function(parameter) {
+            if (parameter === 37445) {
+                return 'Intel Inc.';  // UNMASKED_VENDOR_WEBGL
+            }
+            if (parameter === 37446) {
+                return 'Intel Iris OpenGL Engine';  // UNMASKED_RENDERER_WEBGL
+            }
+            return getParameter.call(this, parameter);
+        };
+
+        const getParameter2 = WebGL2RenderingContext.prototype.getParameter;
+        WebGL2RenderingContext.prototype.getParameter = function(parameter) {
+            if (parameter === 37445) {
+                return 'Intel Inc.';
+            }
+            if (parameter === 37446) {
+                return 'Intel Iris OpenGL Engine';
+            }
+            return getParameter2.call(this, parameter);
+        };
+        """
+        try:
+            self.driver.execute_cdp_cmd(
+                "Page.addScriptToEvaluateOnNewDocument",
+                {"source": webgl_spoof_script}
+            )
+            self.logger.log_browser_operation("WebGL fingerprint spoofing enabled")
+        except Exception as e:
+            self.logger.warning(f"Failed to spoof WebGL: {e}")
+
     # --- lifecycle
     def _cleanup(self):
         try:
