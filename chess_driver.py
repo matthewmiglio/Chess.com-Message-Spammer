@@ -13,18 +13,15 @@ import time
 from dataclasses import dataclass, asdict
 from typing import List, Optional
 
-from selenium import webdriver
+import undetected_chromedriver as uc
 from selenium.common.exceptions import (
     NoSuchElementException,
     TimeoutException,
     SessionNotCreatedException,
 )
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
 
 from logger import get_logger
 
@@ -77,14 +74,13 @@ class ChessDriver:
     ):
         self.credentials = credentials
         self.chrome_process_id = None
-        self.service = None
         self._tmp_user_data_dir = tempfile.mkdtemp(prefix="selenium_chrome_profile_")
         atexit.register(self._cleanup)
         self.logger = get_logger()
         if credentials:
             print(f'Using credentials for user {credentials["username"]}')
 
-        chrome_options = Options()
+        chrome_options = uc.ChromeOptions()
         # Quiet flags
         chrome_options.add_argument("--start-maximized")
         chrome_options.add_argument("--disable-logging")
@@ -95,51 +91,33 @@ class ChessDriver:
         chrome_options.add_argument("--disable-in-process-stack-traces")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-notifications")
-        chrome_options.add_argument("--disable-extensions")
-        chrome_options.add_argument(
-            "--disable-features=NetworkService,OptimizationHints,OptimizationGuideModelDownloading,"
-            "PlatformVoice,TextSafetyClassifier,UseChromeAI"
-        )
-
-        # Key fixes to avoid profile lock + port collisions
-        chrome_options.add_argument(f"--user-data-dir={self._tmp_user_data_dir}")
-        chrome_options.add_argument("--profile-directory=Default")
-        chrome_options.add_argument(f"--remote-debugging-port={_get_free_port()}")
-
-        # Reduce logs & "automation" banner
-        chrome_options.add_experimental_option(
-            "excludeSwitches", ["enable-logging", "enable-automation"]
-        )
-        chrome_options.add_experimental_option("useAutomationExtension", False)
 
         if headless:
             chrome_options.add_argument("--headless=new")
 
-        self.service = Service(
-            ChromeDriverManager().install(),
-            log_path=os.devnull,
-        )
-
         try:
-            self.logger.log_browser_operation("Initializing Chrome browser")
+            self.logger.log_browser_operation("Initializing Chrome browser (undetected)")
             with contextlib.redirect_stderr(open(os.devnull, "w")):
-                self.driver = webdriver.Chrome(service=self.service, options=chrome_options)
+                self.driver = uc.Chrome(
+                    options=chrome_options,
+                    user_data_dir=self._tmp_user_data_dir,
+                    use_subprocess=True,
+                )
                 # Track the Chrome process ID for targeted cleanup
-                self.chrome_process_id = self.driver.service.process.pid if self.driver.service.process else None
+                self.chrome_process_id = self.driver.browser_pid if hasattr(self.driver, 'browser_pid') else None
             self.logger.log_browser_operation(f"Chrome browser initialized (PID: {self.chrome_process_id})")
         except SessionNotCreatedException:
-            # retry once with a fresh dir/port
+            # retry once with a fresh dir
             self.logger.log_browser_operation("Retrying Chrome initialization with fresh configuration")
             self._cleanup()
             self._tmp_user_data_dir = tempfile.mkdtemp(prefix="selenium_chrome_profile_retry_")
-            chrome_options.arguments = [a for a in chrome_options.arguments if not a.startswith("--user-data-dir=")]
-            chrome_options.add_argument(f"--user-data-dir={self._tmp_user_data_dir}")
-            chrome_options.arguments = [a for a in chrome_options.arguments if not a.startswith("--remote-debugging-port=")]
-            chrome_options.add_argument(f"--remote-debugging-port={_get_free_port()}")
             with contextlib.redirect_stderr(open(os.devnull, "w")):
-                self.driver = webdriver.Chrome(service=self.service, options=chrome_options)
-                # Track the Chrome process ID for targeted cleanup
-                self.chrome_process_id = self.driver.service.process.pid if self.driver.service.process else None
+                self.driver = uc.Chrome(
+                    options=chrome_options,
+                    user_data_dir=self._tmp_user_data_dir,
+                    use_subprocess=True,
+                )
+                self.chrome_process_id = self.driver.browser_pid if hasattr(self.driver, 'browser_pid') else None
             self.logger.log_browser_operation(f"Chrome browser retry successful (PID: {self.chrome_process_id})")
 
         self.driver.set_page_load_timeout(page_load_timeout)
@@ -164,13 +142,6 @@ class ChessDriver:
                     print(f"Error during driver quit: {e}")
                 finally:
                     self.driver = None
-
-            # Clean up the service (chromedriver process)
-            if hasattr(self, "service") and self.service:
-                try:
-                    self.service.stop()
-                except Exception:
-                    pass
 
             # Target only our specific Chrome process if we have its PID
             self._kill_specific_chrome_process()
@@ -272,6 +243,12 @@ class ChessDriver:
 
  
     # --- scraping
+    def _human_type(self, element, text):
+        """Type text character by character with random delays to mimic human typing."""
+        for char in text:
+            element.send_keys(char)
+            time.sleep(random.uniform(0.05, 0.15))
+
     def login(self):
         if not self.credentials:
             raise ValueError("No credentials provided for login")
@@ -281,23 +258,45 @@ class ChessDriver:
 
         self.driver.get(CHESS_LOGIN_PAGE_URL)
 
+        # Random delay after page load
+        time.sleep(random.uniform(1.0, 2.0))
+
         wait = WebDriverWait(self.driver, 10)
 
         username_field = wait.until(
             EC.presence_of_element_located((By.ID, "login-username"))
         )
         username_field.clear()
-        username_field.send_keys(username)
+        time.sleep(random.uniform(0.3, 0.7))
+        self._human_type(username_field, username)
+
+        # Random delay before moving to password field
+        time.sleep(random.uniform(0.5, 1.0))
 
         password_field = self.driver.find_element(By.ID, "login-password")
         password_field.clear()
-        password_field.send_keys(password)
+        time.sleep(random.uniform(0.3, 0.7))
+        self._human_type(password_field, password)
+
+        # Random delay before clicking login
+        time.sleep(random.uniform(0.5, 1.0))
 
         login_button = self.driver.find_element(By.ID, "login")
         login_button.click()
 
+        # Wait for any of these logged-in indicators to appear
+        logged_in_selectors = [
+            "div.sidebar-footer-icon[data-interaction='messages']",  # Messages icon
+            "a[href*='/stats/overview/']",                           # Stats link
+            "div.sidebar-footer-icon[data-interaction='settings']",  # Settings icon
+            "div.toolbar-user-info[data-cy='profile-section']",      # Profile section
+        ]
+
         wait.until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "a.toolbar-action.messages"))
+            EC.any_of(*[
+                EC.presence_of_element_located((By.CSS_SELECTOR, selector))
+                for selector in logged_in_selectors
+            ])
         )
 
     def open_messages(self):
