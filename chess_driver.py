@@ -354,8 +354,8 @@ class ChessDriver:
 
     def _wait_for_login_success(self, timeout=15):
         """
-        Poll for login success indicators while also checking for and dismissing modals.
-        Continuously checks for both until login is confirmed or timeout.
+        Poll for login success indicators while also checking for modals.
+        If a modal appears, it means login succeeded - refresh page to clear it.
         """
         logged_in_selectors = [
             "div.sidebar-footer-icon[data-interaction='messages']",
@@ -369,36 +369,45 @@ class ChessDriver:
             "a.play-quick-links-link",
         ]
 
-        # Selectors for modal close buttons (try clicking any of these)
-        modal_dismiss_selectors = [
-            "div.coach-nudges-modal-component button.cc-close-button-component",
-            "div.cc-modal-body button.cc-close-button-component",
-            "button.cc-modal-close-component",
-            "div.coach-nudges-modal-component button.cc-button-ghost",
-            "div.cc-modal-body button.cc-button-ghost",
+        # Selectors for modal containers (presence = logged in)
+        modal_selectors = [
+            "div.coach-nudges-modal-component",
+            "div.cc-modal-body",
         ]
 
         start_time = time.time()
+        last_log_time = 0
+
+        self.logger.info("Waiting for login confirmation...")
 
         while time.time() - start_time < timeout:
+            elapsed = time.time() - start_time
+
+            # Log progress every 3 seconds (not spammy)
+            if elapsed - last_log_time >= 3:
+                self.logger.info(f"Still checking for login confirmation... ({int(elapsed)}s elapsed)")
+                last_log_time = elapsed
+
             # Check for login success indicators
             for selector in logged_in_selectors:
                 try:
                     element = self.driver.find_element(By.CSS_SELECTOR, selector)
                     if element.is_displayed():
-                        return  # Login successful
+                        self.logger.info(f"Login confirmed via: {selector}")
+                        return
                 except NoSuchElementException:
                     pass
 
-            # Always check for modals (they can appear multiple times)
-            for selector in modal_dismiss_selectors:
+            # Check for modals - if present, login succeeded, refresh to clear
+            for selector in modal_selectors:
                 try:
-                    close_btn = self.driver.find_element(By.CSS_SELECTOR, selector)
-                    if close_btn.is_displayed():
-                        close_btn.click()
-                        self.logger.log_browser_operation(f"Dismissed modal via: {selector}")
-                        time.sleep(0.5)
-                        break
+                    modal = self.driver.find_element(By.CSS_SELECTOR, selector)
+                    if modal.is_displayed():
+                        self.logger.info(f"Modal detected ({selector}) - login successful, refreshing page...")
+                        self.driver.refresh()
+                        time.sleep(1.5)
+                        self.logger.info("Page refreshed, login complete")
+                        return
                 except NoSuchElementException:
                     pass
 
