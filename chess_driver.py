@@ -123,42 +123,70 @@ class ChessDriver:
         self.driver.set_page_load_timeout(page_load_timeout)
         self.driver.implicitly_wait(implicit_wait)
 
-        # Spoof WebGL to hide VM fingerprint
-        self._spoof_webgl()
+        # Spoof browser fingerprint to hide VM detection
+        self._apply_fingerprint_spoofing()
 
-    def _spoof_webgl(self):
-        """Inject script to spoof WebGL renderer/vendor to look like a real GPU."""
-        webgl_spoof_script = """
+    def _apply_fingerprint_spoofing(self):
+        """Inject script to spoof various browser fingerprints to hide VM."""
+        spoof_script = """
+        // Spoof WebGL renderer/vendor
         const getParameter = WebGLRenderingContext.prototype.getParameter;
         WebGLRenderingContext.prototype.getParameter = function(parameter) {
-            if (parameter === 37445) {
-                return 'Intel Inc.';  // UNMASKED_VENDOR_WEBGL
-            }
-            if (parameter === 37446) {
-                return 'Intel Iris OpenGL Engine';  // UNMASKED_RENDERER_WEBGL
-            }
+            if (parameter === 37445) return 'Intel Inc.';
+            if (parameter === 37446) return 'Intel Iris OpenGL Engine';
             return getParameter.call(this, parameter);
         };
-
         const getParameter2 = WebGL2RenderingContext.prototype.getParameter;
         WebGL2RenderingContext.prototype.getParameter = function(parameter) {
-            if (parameter === 37445) {
-                return 'Intel Inc.';
-            }
-            if (parameter === 37446) {
-                return 'Intel Iris OpenGL Engine';
-            }
+            if (parameter === 37445) return 'Intel Inc.';
+            if (parameter === 37446) return 'Intel Iris OpenGL Engine';
             return getParameter2.call(this, parameter);
+        };
+
+        // Spoof hardware concurrency (CPU cores)
+        Object.defineProperty(navigator, 'hardwareConcurrency', {
+            get: () => 12
+        });
+
+        // Spoof device memory (GB)
+        Object.defineProperty(navigator, 'deviceMemory', {
+            get: () => 8
+        });
+
+        // Spoof screen resolution
+        Object.defineProperty(screen, 'width', { get: () => 1920 });
+        Object.defineProperty(screen, 'height', { get: () => 1080 });
+        Object.defineProperty(screen, 'availWidth', { get: () => 1920 });
+        Object.defineProperty(screen, 'availHeight', { get: () => 1040 });
+
+        // Spoof timezone to America/New_York
+        const originalDateTimeFormat = Intl.DateTimeFormat;
+        Intl.DateTimeFormat = function(locales, options) {
+            options = options || {};
+            options.timeZone = options.timeZone || 'America/New_York';
+            return new originalDateTimeFormat(locales, options);
+        };
+        Intl.DateTimeFormat.prototype = originalDateTimeFormat.prototype;
+        Intl.DateTimeFormat.supportedLocalesOf = originalDateTimeFormat.supportedLocalesOf;
+
+        // Also override Date to use Eastern timezone offset (-5 or -4 for DST)
+        const originalGetTimezoneOffset = Date.prototype.getTimezoneOffset;
+        Date.prototype.getTimezoneOffset = function() {
+            // Return offset for Eastern Time (300 = UTC-5, 240 = UTC-4 DST)
+            const month = this.getMonth();
+            // Rough DST check (March-November)
+            if (month >= 2 && month <= 10) return 240;
+            return 300;
         };
         """
         try:
             self.driver.execute_cdp_cmd(
                 "Page.addScriptToEvaluateOnNewDocument",
-                {"source": webgl_spoof_script}
+                {"source": spoof_script}
             )
-            self.logger.log_browser_operation("WebGL fingerprint spoofing enabled")
+            self.logger.log_browser_operation("Browser fingerprint spoofing enabled")
         except Exception as e:
-            self.logger.warning(f"Failed to spoof WebGL: {e}")
+            self.logger.warning(f"Failed to apply fingerprint spoofing: {e}")
 
     # --- lifecycle
     def _cleanup(self):
