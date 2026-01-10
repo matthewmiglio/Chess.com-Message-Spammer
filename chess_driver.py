@@ -349,6 +349,9 @@ class ChessDriver:
         login_button = self.driver.find_element(By.ID, "login")
         login_button.click()
 
+        # Dismiss any popup modals that appear after login (e.g., coach nudges)
+        self._dismiss_post_login_modals()
+
         # Wait for any of these logged-in indicators to appear
         logged_in_selectors = [
             "div.sidebar-footer-icon[data-interaction='messages']",  # Messages icon
@@ -363,6 +366,27 @@ class ChessDriver:
                 for selector in logged_in_selectors
             ])
         )
+
+    def _dismiss_post_login_modals(self):
+        """Dismiss any popup modals that appear after login (coach nudges, etc.)."""
+        time.sleep(1.5)  # Wait for modal to potentially appear
+
+        modal_dismiss_selectors = [
+            "button.cc-modal-close-component",           # Modal close X button
+            "button[aria-label='Close']",                # Close button by aria-label
+            ".coach-nudges-modal-component button.cc-button-ghost",  # "No, thank you" button
+        ]
+
+        for selector in modal_dismiss_selectors:
+            try:
+                close_btn = self.driver.find_element(By.CSS_SELECTOR, selector)
+                if close_btn.is_displayed():
+                    close_btn.click()
+                    self.logger.log_browser_operation("Dismissed post-login modal")
+                    time.sleep(0.5)  # Wait for modal to close
+                    return
+            except NoSuchElementException:
+                continue
 
     def open_messages(self):
         self.driver.get("https://www.chess.com/messages/")

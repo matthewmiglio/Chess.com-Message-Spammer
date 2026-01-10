@@ -6,6 +6,7 @@ from logger import get_logger, log_session_end
 import csv
 import os
 import pandas as pd
+import random
 import sys
 import time
 import traceback
@@ -73,9 +74,10 @@ def main():
     logger = get_logger()
 
     try:
-        # Load all accounts
+        # Load all accounts and randomize order
         creds_manager = ChessCreds()
         accounts = creds_manager.get_all_accounts()
+        random.shuffle(accounts)
         num_accounts = len(accounts)
         total_messages_needed = num_accounts * MESSAGES_PER_RUN
 
