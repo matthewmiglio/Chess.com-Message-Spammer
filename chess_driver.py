@@ -362,6 +362,11 @@ class ChessDriver:
             "a[href*='/stats/overview/']",
             "div.sidebar-footer-icon[data-interaction='settings']",
             "div.toolbar-user-info[data-cy='profile-section']",
+            "div.home-user-info",
+            "a.toolbar-action.friends",
+            "a.toolbar-action.messages",
+            "a.toolbar-action.settings",
+            "a.play-quick-links-link",
         ]
 
         modal_dismiss_selectors = [
