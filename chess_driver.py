@@ -378,42 +378,49 @@ class ChessDriver:
         start_time = time.time()
         last_log_time = -3  # Start at -3 so first log happens immediately
 
+        # Disable implicit wait for fast polling (restore after)
+        self.driver.implicitly_wait(0)
+
         print("Waiting for login confirmation...")
 
-        while time.time() - start_time < timeout:
-            elapsed = time.time() - start_time
+        try:
+            while time.time() - start_time < timeout:
+                elapsed = time.time() - start_time
 
-            # Log progress every 3 seconds
-            if elapsed - last_log_time >= 3:
-                print(f"  Checking... ({int(elapsed)}s elapsed)")
-                last_log_time = elapsed
+                # Log progress every 3 seconds
+                if elapsed - last_log_time >= 3:
+                    print(f"  Checking... ({int(elapsed)}s elapsed)")
+                    last_log_time = elapsed
 
-            # Check for login success indicators
-            for selector in logged_in_selectors:
-                try:
-                    element = self.driver.find_element(By.CSS_SELECTOR, selector)
-                    if element.is_displayed():
-                        print(f"Login confirmed via: {selector}")
-                        return
-                except NoSuchElementException:
-                    pass
+                # Check for login success indicators
+                for selector in logged_in_selectors:
+                    try:
+                        element = self.driver.find_element(By.CSS_SELECTOR, selector)
+                        if element.is_displayed():
+                            print(f"Login confirmed via: {selector}")
+                            return
+                    except NoSuchElementException:
+                        pass
 
-            # Check for modals - if present, login succeeded, refresh to clear
-            for selector in modal_selectors:
-                try:
-                    modal = self.driver.find_element(By.CSS_SELECTOR, selector)
-                    if modal.is_displayed():
-                        print(f"Modal detected ({selector}) - login successful, refreshing page...")
-                        self.driver.refresh()
-                        time.sleep(1.5)
-                        print("Page refreshed, login complete")
-                        return
-                except NoSuchElementException:
-                    pass
+                # Check for modals - if present, login succeeded, refresh to clear
+                for selector in modal_selectors:
+                    try:
+                        modal = self.driver.find_element(By.CSS_SELECTOR, selector)
+                        if modal.is_displayed():
+                            print(f"Modal detected ({selector}) - login successful, refreshing page...")
+                            self.driver.refresh()
+                            time.sleep(1.5)
+                            print("Page refreshed, login complete")
+                            return
+                    except NoSuchElementException:
+                        pass
 
-            time.sleep(0.2)  # Poll interval
+                time.sleep(0.2)  # Poll interval
 
-        raise TimeoutException(f"Login success not detected within {timeout} seconds")
+            raise TimeoutException(f"Login success not detected within {timeout} seconds")
+        finally:
+            # Restore implicit wait
+            self.driver.implicitly_wait(5)
 
     def open_messages(self):
         self.driver.get("https://www.chess.com/messages/")
