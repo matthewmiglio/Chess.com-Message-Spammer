@@ -384,37 +384,48 @@ class ChessDriver:
         print("Waiting for login confirmation...")
 
         try:
+            iteration = 0
             while time.time() - start_time < timeout:
                 elapsed = time.time() - start_time
+                iteration += 1
 
                 # Log progress every 3 seconds
                 if elapsed - last_log_time >= 3:
-                    print(f"  Checking... ({int(elapsed)}s elapsed)")
+                    print(f"  Checking... ({int(elapsed)}s elapsed, iteration {iteration})")
                     last_log_time = elapsed
 
                 # Check for login success indicators
-                for selector in logged_in_selectors:
+                for i, selector in enumerate(logged_in_selectors):
+                    check_start = time.time()
+                    print(f"    [{i+1}/{len(logged_in_selectors)}] Checking: {selector[:50]}...", end=" ", flush=True)
                     try:
                         element = self.driver.find_element(By.CSS_SELECTOR, selector)
                         if element.is_displayed():
+                            print(f"FOUND! ({time.time()-check_start:.2f}s)")
                             print(f"Login confirmed via: {selector}")
                             return
+                        print(f"exists but hidden ({time.time()-check_start:.2f}s)")
                     except NoSuchElementException:
-                        pass
+                        print(f"not found ({time.time()-check_start:.2f}s)")
 
                 # Check for modals - if present, login succeeded, refresh to clear
-                for selector in modal_selectors:
+                for i, selector in enumerate(modal_selectors):
+                    check_start = time.time()
+                    print(f"    [modal {i+1}/{len(modal_selectors)}] Checking: {selector}...", end=" ", flush=True)
                     try:
                         modal = self.driver.find_element(By.CSS_SELECTOR, selector)
                         if modal.is_displayed():
+                            print(f"FOUND! ({time.time()-check_start:.2f}s)")
                             print(f"Modal detected ({selector}) - login successful, refreshing page...")
                             self.driver.refresh()
                             time.sleep(1.5)
                             print("Page refreshed, login complete")
                             return
+                        print(f"exists but hidden ({time.time()-check_start:.2f}s)")
                     except NoSuchElementException:
-                        pass
+                        print(f"not found ({time.time()-check_start:.2f}s)")
 
+                print(f"  --- End of iteration {iteration}, sleeping 0.2s ---")
                 time.sleep(0.2)  # Poll interval
 
             raise TimeoutException(f"Login success not detected within {timeout} seconds")
