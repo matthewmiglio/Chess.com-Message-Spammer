@@ -185,12 +185,21 @@ class ChessMessager:
 
     def send_messages(self, limit=100):
         sends = 0
+        failures = 0
+        max_failures = 3
         self.logger.info(f"Starting message sending session (limit: {limit})")
 
         while 1:
             if self.send_random_message():
                 sends += 1
+                failures = 0  # Reset failure counter on success
                 self.logger.info(f"Progress: Sent {sends}/{limit} messages")
+            else:
+                failures += 1
+                self.logger.warning(f"Message failed ({failures}/{max_failures} attempts)")
+                if failures >= max_failures:
+                    self.logger.error(f"Max failures reached ({max_failures}). Stopping this account.")
+                    break
             if sends >= limit:
                 self.logger.info(f"Completed message sending session: {sends} messages sent")
                 break
