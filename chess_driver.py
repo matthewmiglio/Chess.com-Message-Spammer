@@ -376,16 +376,16 @@ class ChessDriver:
         ]
 
         start_time = time.time()
-        last_log_time = 0
+        last_log_time = -3  # Start at -3 so first log happens immediately
 
-        self.logger.info("Waiting for login confirmation...")
+        print("Waiting for login confirmation...")
 
         while time.time() - start_time < timeout:
             elapsed = time.time() - start_time
 
-            # Log progress every 3 seconds (not spammy)
+            # Log progress every 3 seconds
             if elapsed - last_log_time >= 3:
-                self.logger.info(f"Still checking for login confirmation... ({int(elapsed)}s elapsed)")
+                print(f"  Checking... ({int(elapsed)}s elapsed)")
                 last_log_time = elapsed
 
             # Check for login success indicators
@@ -393,7 +393,7 @@ class ChessDriver:
                 try:
                     element = self.driver.find_element(By.CSS_SELECTOR, selector)
                     if element.is_displayed():
-                        self.logger.info(f"Login confirmed via: {selector}")
+                        print(f"Login confirmed via: {selector}")
                         return
                 except NoSuchElementException:
                     pass
@@ -403,10 +403,10 @@ class ChessDriver:
                 try:
                     modal = self.driver.find_element(By.CSS_SELECTOR, selector)
                     if modal.is_displayed():
-                        self.logger.info(f"Modal detected ({selector}) - login successful, refreshing page...")
+                        print(f"Modal detected ({selector}) - login successful, refreshing page...")
                         self.driver.refresh()
                         time.sleep(1.5)
-                        self.logger.info("Page refreshed, login complete")
+                        print("Page refreshed, login complete")
                         return
                 except NoSuchElementException:
                     pass
