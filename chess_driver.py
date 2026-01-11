@@ -359,7 +359,6 @@ class ChessDriver:
         """
         logged_in_selectors = [
             "div.sidebar-footer-icon[data-interaction='messages']",
-            "a[href*='/stats/overview/']",
             "div.sidebar-footer-icon[data-interaction='settings']",
             "div.toolbar-user-info[data-cy='profile-section']",
             "div.home-user-info",
