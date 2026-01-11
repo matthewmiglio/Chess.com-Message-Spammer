@@ -3,6 +3,7 @@ from logger import get_logger
 import csv
 import pandas as pd
 import random
+import time
 from datetime import datetime
 
 
@@ -204,6 +205,10 @@ class ChessMessager:
             target_limit=limit,
             success_rate=f"{(sends/limit)*100:.1f}%" if limit > 0 else "N/A"
         )
+
+        # Wait for final message to fully send before driver cleanup
+        print("Waiting 10s for final message to complete...")
+        time.sleep(10)
 
     def test_compile_random_ad_message(self):
         for _ in range(100):
