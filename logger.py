@@ -5,14 +5,33 @@ from pathlib import Path
 
 
 class SessionLogger:
+    MAX_LOG_FILES = 50
+    CLEANUP_COUNT = 10
+
     def __init__(self):
         self.start_time = datetime.now()
         self.log_dir = Path("logs")
         self.log_dir.mkdir(exist_ok=True)
 
+        # Clean up old logs if we have too many
+        self._cleanup_old_logs()
+
         # Format: 21_Sept_2025_13_34.log
         timestamp = self.start_time.strftime("%d_%b_%Y_%H_%M")
         self.log_file = self.log_dir / f"{timestamp}.log"
+
+    def _cleanup_old_logs(self):
+        """Remove oldest log files if we exceed MAX_LOG_FILES."""
+        log_files = sorted(self.log_dir.glob("*.log"), key=lambda f: f.stat().st_mtime)
+
+        if len(log_files) >= self.MAX_LOG_FILES:
+            files_to_delete = log_files[:self.CLEANUP_COUNT]
+            for f in files_to_delete:
+                try:
+                    f.unlink()
+                    print(f"Deleted old log: {f.name}")
+                except Exception as e:
+                    print(f"Failed to delete {f.name}: {e}")
 
         # Configure logging
         self.logger = logging.getLogger("chess_bot")
