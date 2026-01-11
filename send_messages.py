@@ -31,12 +31,8 @@ class MessageLogger:
             pass
 
     def is_new_recipient(self, recipient):
-        self.logger.debug(f"Checking if player: {recipient} is new")
         df = pd.read_csv(self.fp)
-        self.logger.debug(f"Message log contains {len(df)} entries")
-
         is_new = recipient not in df["recipient"].values
-        self.logger.log_new_recipient_check(recipient, is_new)
         return is_new
 
     def log_message(self, recipient, message):
