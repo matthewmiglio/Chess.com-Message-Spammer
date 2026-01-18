@@ -78,6 +78,44 @@ class SessionLogger:
     def debug(self, message):
         self.logger.debug(message)
 
+    def log_clean_exception(self, context: str, exc: Exception):
+        """
+        Log an exception with a clean, human-readable message.
+        Strips out useless Chrome stacktraces and internal library paths.
+        """
+        error_msg = str(exc)
+
+        # Extract just the first line of the message (the useful part)
+        first_line = error_msg.split('\n')[0].strip()
+
+        # Remove "Message: " prefix if present
+        if first_line.startswith("Message: "):
+            first_line = first_line[9:]
+
+        # Map common Selenium errors to human-readable descriptions
+        friendly_messages = {
+            "no such window": "Browser window closed unexpectedly (Chrome crashed or was killed)",
+            "target window already closed": "Browser window closed unexpectedly (Chrome crashed or was killed)",
+            "web view not found": "Browser window closed unexpectedly (Chrome crashed or was killed)",
+            "Login success not detected": "Login timed out (wrong credentials, CAPTCHA, or page structure changed)",
+            "element not interactable": "Page element not ready or visible",
+            "element has zero size": "Page element not loaded properly",
+            "stale element": "Page changed while interacting with element",
+        }
+
+        # Find matching friendly message
+        friendly = None
+        for key, msg in friendly_messages.items():
+            if key.lower() in first_line.lower():
+                friendly = msg
+                break
+
+        if friendly:
+            self.logger.error(f"{context}: {friendly}")
+        else:
+            # For unknown errors, just log the first line (no stacktrace)
+            self.logger.error(f"{context}: {first_line}")
+
     def log_session_end(self):
         end_time = datetime.now()
         duration = end_time - self.start_time

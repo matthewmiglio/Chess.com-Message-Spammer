@@ -165,10 +165,9 @@ class ChessMessager:
     def send_random_message(self):
         # log in if not logged in
         if not self.logged_in:
-            self.logger.info("Logging into Chess.com...")
             self.driver.login()
             self.logged_in = True
-            self.logger.info("Successfully logged in")
+            self.logger.info("Login successful")
 
         recipient = self.get_random_target()
         message = self.compile_random_ad_message()
@@ -180,7 +179,7 @@ class ChessMessager:
             self.logger.log_message_success(recipient)
             return True
         else:
-            self.logger.log_message_failure(recipient, "Unknown error")
+            # Error already logged by chess_driver.send_message()
             return False
 
     def send_messages(self, limit=100):
@@ -212,7 +211,7 @@ class ChessMessager:
         )
 
         # Wait for final message to fully send before driver cleanup
-        print("Waiting 10s for final message to complete...")
+        self.logger.info("Waiting 10s for final message to complete...")
         time.sleep(10)
 
     def test_compile_random_ad_message(self):

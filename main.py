@@ -9,7 +9,6 @@ import pandas as pd
 import random
 import sys
 import time
-import traceback
 
 MESSAGES_PER_RUN = 3  # Messages per account per run
 SCRAPE_BACKOFF_MINUTES = [1, 3, 5]  # Backoff times between retries
@@ -110,8 +109,7 @@ def main():
     except KeyboardInterrupt:
         logger.info("Program interrupted by user (Ctrl+C)")
     except Exception as e:
-        logger.error(f"Unexpected error in main execution: {e}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        logger.log_clean_exception("Session failed", e)
         sys.exit(1)
     finally:
         log_session_end()

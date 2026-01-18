@@ -78,7 +78,7 @@ class ChessDriver:
         atexit.register(self._cleanup)
         self.logger = get_logger()
         if credentials:
-            print(f'Using credentials for user {credentials["username"]}')
+            self.logger.info(f'Initializing browser for account: {credentials["username"]}')
 
         chrome_options = uc.ChromeOptions()
         # Quiet flags
@@ -321,35 +321,54 @@ class ChessDriver:
         username = self.credentials['username']
         password = self.credentials['password']
 
-        self.driver.get(CHESS_LOGIN_PAGE_URL)
+        # Step 1: Navigate to login page
+        self.logger.info("[LOGIN 1/4] Opening login page...")
+        try:
+            self.driver.get(CHESS_LOGIN_PAGE_URL)
+        except Exception as e:
+            self.logger.log_clean_exception("[LOGIN 1/4] Failed to open login page", e)
+            raise
 
         # Random delay after page load
         time.sleep(random.uniform(1.0, 2.0))
 
         wait = WebDriverWait(self.driver, 10)
 
-        username_field = wait.until(
-            EC.presence_of_element_located((By.ID, "login-username"))
-        )
-        username_field.clear()
-        time.sleep(random.uniform(0.3, 0.7))
-        self._human_type(username_field, username)
+        # Step 2: Enter username
+        self.logger.info("[LOGIN 2/4] Entering username...")
+        try:
+            username_field = wait.until(
+                EC.presence_of_element_located((By.ID, "login-username"))
+            )
+            username_field.clear()
+            time.sleep(random.uniform(0.3, 0.7))
+            self._human_type(username_field, username)
+        except Exception as e:
+            self.logger.log_clean_exception("[LOGIN 2/4] Failed to enter username", e)
+            raise
 
         # Random delay before moving to password field
         time.sleep(random.uniform(0.5, 1.0))
 
-        password_field = self.driver.find_element(By.ID, "login-password")
-        password_field.clear()
-        time.sleep(random.uniform(0.3, 0.7))
-        self._human_type(password_field, password)
+        # Step 3: Enter password and click login
+        self.logger.info("[LOGIN 3/4] Entering password and submitting...")
+        try:
+            password_field = self.driver.find_element(By.ID, "login-password")
+            password_field.clear()
+            time.sleep(random.uniform(0.3, 0.7))
+            self._human_type(password_field, password)
 
-        # Random delay before clicking login
-        time.sleep(random.uniform(0.5, 1.0))
+            # Random delay before clicking login
+            time.sleep(random.uniform(0.5, 1.0))
 
-        login_button = self.driver.find_element(By.ID, "login")
-        login_button.click()
+            login_button = self.driver.find_element(By.ID, "login")
+            login_button.click()
+        except Exception as e:
+            self.logger.log_clean_exception("[LOGIN 3/4] Failed to submit credentials", e)
+            raise
 
-        # Wait for login indicators, dismissing any modals that appear
+        # Step 4: Wait for login confirmation
+        self.logger.info("[LOGIN 4/4] Waiting for login confirmation...")
         self._wait_for_login_success(timeout=15)
 
     def _wait_for_login_success(self, timeout=15):
@@ -375,56 +394,32 @@ class ChessDriver:
         ]
 
         start_time = time.time()
-        last_log_time = -3  # Start at -3 so first log happens immediately
 
         # Disable implicit wait for fast polling (restore after)
         self.driver.implicitly_wait(0)
 
-        print("Waiting for login confirmation...")
-
         try:
-            iteration = 0
             while time.time() - start_time < timeout:
-                elapsed = time.time() - start_time
-                iteration += 1
-
-                # Log progress every 3 seconds
-                if elapsed - last_log_time >= 3:
-                    print(f"  Checking... ({int(elapsed)}s elapsed, iteration {iteration})")
-                    last_log_time = elapsed
-
                 # Check for login success indicators
-                for i, selector in enumerate(logged_in_selectors):
-                    check_start = time.time()
-                    print(f"    [{i+1}/{len(logged_in_selectors)}] Checking: {selector[:50]}...", end=" ", flush=True)
+                for selector in logged_in_selectors:
                     try:
                         element = self.driver.find_element(By.CSS_SELECTOR, selector)
                         if element.is_displayed():
-                            print(f"FOUND! ({time.time()-check_start:.2f}s)")
-                            print(f"Login confirmed via: {selector}")
                             return
-                        print(f"exists but hidden ({time.time()-check_start:.2f}s)")
                     except NoSuchElementException:
-                        print(f"not found ({time.time()-check_start:.2f}s)")
+                        pass
 
                 # Check for modals - if present, login succeeded, refresh to clear
-                for i, selector in enumerate(modal_selectors):
-                    check_start = time.time()
-                    print(f"    [modal {i+1}/{len(modal_selectors)}] Checking: {selector}...", end=" ", flush=True)
+                for selector in modal_selectors:
                     try:
                         modal = self.driver.find_element(By.CSS_SELECTOR, selector)
                         if modal.is_displayed():
-                            print(f"FOUND! ({time.time()-check_start:.2f}s)")
-                            print(f"Modal detected ({selector}) - login successful, refreshing page...")
                             self.driver.refresh()
                             time.sleep(1.5)
-                            print("Page refreshed, login complete")
                             return
-                        print(f"exists but hidden ({time.time()-check_start:.2f}s)")
                     except NoSuchElementException:
-                        print(f"not found ({time.time()-check_start:.2f}s)")
+                        pass
 
-                print(f"  --- End of iteration {iteration}, sleeping 0.2s ---")
                 time.sleep(0.2)  # Poll interval
 
             raise TimeoutException(f"Login success not detected within {timeout} seconds")
@@ -772,7 +767,7 @@ class ChessDriver:
             return True
 
         except Exception as e:
-            self.logger.error(f"Error sending message to {recipient_username}: {e}")
+            self.logger.log_clean_exception(f"Error sending message to {recipient_username}", e)
             # Make sure we're back in default context
             try:
                 self.driver.switch_to.default_content()
